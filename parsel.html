@@ -82,6 +82,10 @@ button {
     <button id="filterBtn">Sorgula</button>
     <button id="clearBtn">Temizle</button>
     <button id="downloadKml">KML İndir</button>
+
+    <!-- MANUEL GEOJSON -->
+    <input type="file" id="geojsonFile" accept=".geojson,.json" />
+    <button id="manualLoad">GeoJSON Yükle</button>
 </div>
 
 <div id="main">
@@ -113,58 +117,77 @@ function makeKey(p){
     return `${p.il_ad}-${p.ilce_ad}-${p.mahalle_ad}-${p.adano}-${p.parselno}`;
 }
 
-function loadGeoJSON(url){
-    fetch(url)
-      .then(res => res.json())
-      .then(data => {
-          featureIndex.clear();
-          filteredFeatures.clear();
-          document.getElementById("parcelItems").innerHTML = "";
+/* -------------------------
+   MANUEL GEOJSON OKUMA
+------------------------- */
+document.getElementById("manualLoad").onclick = function () {
+    let file = document.getElementById("geojsonFile").files[0];
+    if (!file) {
+        alert("Lütfen bir GeoJSON dosyası seçin.");
+        return;
+    }
 
-          if(vectorGridLayer) map.removeLayer(vectorGridLayer);
-
-          data.features.forEach(f=>{
-              featureIndex.set(makeKey(f.properties), f);
-          });
-
-          vectorGridLayer = L.vectorGrid.slicer(data, {
-              rendererFactory: L.canvas.tile,
-              interactive: true,
-              vectorTileLayerStyles: {
-                  sliced: {
-                      fill: true,
-                      fillColor: '#3388ff',
-                      fillOpacity: 0.2,
-                      color: '#3388ff',
-                      weight: 1
-                  }
-              },
-              getFeatureId: f => makeKey(f.properties)
-          }).addTo(map);
-
-          vectorGridLayer.on("click", function(e){
-              var props = e.layer.properties;
-              var key = makeKey(props);
-              var feature = featureIndex.get(key);
-              if(!feature) return;
-
-              highlightFeature(feature);
-
-              if(!filteredFeatures.has(key)){
-                  filteredFeatures.set(key, feature);
-                  updateList();
-              }
-          });
-
-          console.log("GeoJSON otomatik yüklendi.");
-      })
-      .catch(err => console.error("GeoJSON yüklenirken hata oluştu:", err));
-}
-
-window.onload = function(){
-    loadGeoJSON('https://raw.githubusercontent.com/cengizokam0/cengiz-bilgi-sistemi/main/kadastro_parselleri.geojson');
+    let reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            let data = JSON.parse(e.target.result);
+            loadGeoJSONfromObject(data);
+            alert("GeoJSON başarıyla yüklendi!");
+        } catch (err) {
+            alert("Geçersiz GeoJSON dosyası!");
+        }
+    };
+    reader.readAsText(file);
 };
 
+/* -------------------------
+   OBJE OLARAK GEOJSON YÜKLE
+------------------------- */
+function loadGeoJSONfromObject(data){
+
+    featureIndex.clear();
+    filteredFeatures.clear();
+    document.getElementById("parcelItems").innerHTML = "";
+
+    if(vectorGridLayer) map.removeLayer(vectorGridLayer);
+
+    data.features.forEach(f=>{
+        featureIndex.set(makeKey(f.properties), f);
+    });
+
+    vectorGridLayer = L.vectorGrid.slicer(data, {
+        rendererFactory: L.canvas.tile,
+        interactive: true,
+        vectorTileLayerStyles: {
+            sliced: {
+                fill: true,
+                fillColor: '#3388ff',
+                fillOpacity: 0.2,
+                color: '#3388ff',
+                weight: 1
+            }
+        },
+        getFeatureId: f => makeKey(f.properties)
+    }).addTo(map);
+
+    vectorGridLayer.on("click", function(e){
+        var props = e.layer.properties;
+        var key = makeKey(props);
+        var feature = featureIndex.get(key);
+        if(!feature) return;
+
+        highlightFeature(feature);
+
+        if(!filteredFeatures.has(key)){
+            filteredFeatures.set(key, feature);
+            updateList();
+        }
+    });
+}
+
+/* -------------------------
+   PARSEL ÖNE ÇIKARTMA
+------------------------- */
 function highlightFeature(feature){
     if(highlightLayer) map.removeLayer(highlightLayer);
 
@@ -185,6 +208,9 @@ function highlightFeature(feature){
     map.fitBounds(highlightLayer.getBounds());
 }
 
+/* -------------------------
+   LİSTE GÜNCELLE
+------------------------- */
 function updateList(){
     let html = "";
     filteredFeatures.forEach((feature, key)=>{
@@ -199,6 +225,9 @@ function updateList(){
     });
 }
 
+/* -------------------------
+   SORGULAMA
+------------------------- */
 function queryParcels(){
     var il = il_ad.value.trim().toLowerCase();
     var ilce = ilce_ad.value.trim().toLowerCase();
@@ -250,6 +279,9 @@ clearBtn.onclick = ()=>{
     if(highlightLayer) map.removeLayer(highlightLayer);
 };
 
+/* -------------------------
+   KML İNDİRME
+------------------------- */
 downloadKml.onclick = ()=>{
     if(filteredFeatures.size===0) return alert("Parsel seçilmedi!");
     var kml = tokml({type:"FeatureCollection", features: Array.from(filteredFeatures.values())});
@@ -259,6 +291,7 @@ downloadKml.onclick = ()=>{
     link.download="parseller.kml";
     link.click();
 };
+
 </script>
 </body>
 </html>
