@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Cengiz Bilgi Sistemi – Parsel Sorgulama</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -10,7 +10,6 @@
 <style>
 body { margin:0; font-family:Arial; }
 
-/* HEADER */
 header {
     background:#1e3c72;
     color:#fff;
@@ -22,7 +21,6 @@ header {
 
 header a { color:white; text-decoration:none; margin-left:20px; font-weight:bold; }
 
-/* CONTROL BAR */
 #controls {
     padding:10px;
     background:#fff;
@@ -46,7 +44,6 @@ button {
     border-radius:4px;
 }
 
-/* MAIN AREA */
 #main { display:flex; height:86vh; }
 #map { flex:3; }
 #sidebar {
@@ -67,7 +64,6 @@ button {
 #parcelItems li:hover { background:#ddd; }
 </style>
 </head>
-
 <body>
 
 <header>
@@ -78,12 +74,11 @@ button {
 </header>
 
 <div id="controls">
-    <input type="file" id="geojsonFile" accept=".geojson">
-    <input type="text" id="il_ad" placeholder="İl">
-    <input type="text" id="ilce_ad" placeholder="İlçe">
-    <input type="text" id="mahalle_ad" placeholder="Mahalle">
-    <input type="text" id="adano" placeholder="Ada No">
-    <input type="text" id="parselno" placeholder="Parsel No">
+    <input type="text" id="il_ad" placeholder="İl" />
+    <input type="text" id="ilce_ad" placeholder="İlçe" />
+    <input type="text" id="mahalle_ad" placeholder="Mahalle" />
+    <input type="text" id="adano" placeholder="Ada No" />
+    <input type="text" id="parselno" placeholder="Parsel No" />
     <button id="filterBtn">Sorgula</button>
     <button id="clearBtn">Temizle</button>
     <button id="downloadKml">KML İndir</button>
@@ -102,7 +97,6 @@ button {
 <script src="https://cdn.jsdelivr.net/npm/tokml@0.3.0/tokml.js"></script>
 
 <script>
-// ---- HARİTA & FEATURE ----
 var map = L.map('map').setView([39, 35], 6);
 
 L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
@@ -119,7 +113,6 @@ function makeKey(p){
     return `${p.il_ad}-${p.ilce_ad}-${p.mahalle_ad}-${p.adano}-${p.parselno}`;
 }
 
-// ---- OTOMATİK GEOJSON YÜKLE ----
 function loadGeoJSON(url){
     fetch(url)
       .then(res => res.json())
@@ -168,12 +161,10 @@ function loadGeoJSON(url){
       .catch(err => console.error("GeoJSON yüklenirken hata oluştu:", err));
 }
 
-// Sayfa açıldığında otomatik yükle
 window.onload = function(){
-    loadGeoJSON('parseller.geojson'); // veya GitHub raw link
+    loadGeoJSON('https://raw.githubusercontent.com/cengizokam0/cengiz-bilgi-sistemi/main/kadastro_parselleri.geojson');
 };
 
-// ---- HIGHLIGHT & LIST ----
 function highlightFeature(feature){
     if(highlightLayer) map.removeLayer(highlightLayer);
 
@@ -208,7 +199,6 @@ function updateList(){
     });
 }
 
-// ---- FILTER ----
 function queryParcels(){
     var il = il_ad.value.trim().toLowerCase();
     var ilce = ilce_ad.value.trim().toLowerCase();
