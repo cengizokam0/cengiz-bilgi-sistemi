@@ -102,7 +102,7 @@ button {
 <script src="https://cdn.jsdelivr.net/npm/tokml@0.3.0/tokml.js"></script>
 
 <script>
-// ---- SAME JS LOGIC (tamamen korunmuştur) ----
+// ---- HARİTA & FEATURE ----
 var map = L.map('map').setView([39, 35], 6);
 
 L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
@@ -119,55 +119,61 @@ function makeKey(p){
     return `${p.il_ad}-${p.ilce_ad}-${p.mahalle_ad}-${p.adano}-${p.parselno}`;
 }
 
-document.getElementById("geojsonFile").addEventListener("change", function(e){
-    var reader = new FileReader();
-    reader.onload = function(ev){
-        var data = JSON.parse(ev.target.result);
+// ---- OTOMATİK GEOJSON YÜKLE ----
+function loadGeoJSON(url){
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+          featureIndex.clear();
+          filteredFeatures.clear();
+          document.getElementById("parcelItems").innerHTML = "";
 
-        featureIndex.clear();
-        filteredFeatures.clear();
-        document.getElementById("parcelItems").innerHTML = "";
+          if(vectorGridLayer) map.removeLayer(vectorGridLayer);
 
-        if(vectorGridLayer) map.removeLayer(vectorGridLayer);
+          data.features.forEach(f=>{
+              featureIndex.set(makeKey(f.properties), f);
+          });
 
-        data.features.forEach(f=>{
-            featureIndex.set(makeKey(f.properties), f);
-        });
+          vectorGridLayer = L.vectorGrid.slicer(data, {
+              rendererFactory: L.canvas.tile,
+              interactive: true,
+              vectorTileLayerStyles: {
+                  sliced: {
+                      fill: true,
+                      fillColor: '#3388ff',
+                      fillOpacity: 0.2,
+                      color: '#3388ff',
+                      weight: 1
+                  }
+              },
+              getFeatureId: f => makeKey(f.properties)
+          }).addTo(map);
 
-        vectorGridLayer = L.vectorGrid.slicer(data, {
-            rendererFactory: L.canvas.tile,
-            interactive: true,
-            vectorTileLayerStyles: {
-                sliced: {
-                    fill: true,
-                    fillColor: '#3388ff',
-                    fillOpacity: 0.2,
-                    color: '#3388ff',
-                    weight: 1
-                }
-            },
-            getFeatureId: f => makeKey(f.properties)
-        }).addTo(map);
+          vectorGridLayer.on("click", function(e){
+              var props = e.layer.properties;
+              var key = makeKey(props);
+              var feature = featureIndex.get(key);
+              if(!feature) return;
 
-        vectorGridLayer.on("click", function(e){
-            var props = e.layer.properties;
-            var key = makeKey(props);
-            var feature = featureIndex.get(key);
-            if(!feature) return;
+              highlightFeature(feature);
 
-            highlightFeature(feature);
+              if(!filteredFeatures.has(key)){
+                  filteredFeatures.set(key, feature);
+                  updateList();
+              }
+          });
 
-            if(!filteredFeatures.has(key)){
-                filteredFeatures.set(key, feature);
-                updateList();
-            }
-        });
+          console.log("GeoJSON otomatik yüklendi.");
+      })
+      .catch(err => console.error("GeoJSON yüklenirken hata oluştu:", err));
+}
 
-        alert("GeoJSON yüklendi.");
-    };
-    reader.readAsText(e.target.files[0]);
-});
+// Sayfa açıldığında otomatik yükle
+window.onload = function(){
+    loadGeoJSON('parseller.geojson'); // veya GitHub raw link
+};
 
+// ---- HIGHLIGHT & LIST ----
 function highlightFeature(feature){
     if(highlightLayer) map.removeLayer(highlightLayer);
 
@@ -202,6 +208,7 @@ function updateList(){
     });
 }
 
+// ---- FILTER ----
 function queryParcels(){
     var il = il_ad.value.trim().toLowerCase();
     var ilce = ilce_ad.value.trim().toLowerCase();
