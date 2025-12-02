@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cengiz Bilgi Sistemi</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---------------- GENEL ---------------- */
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Montserrat', sans-serif;
+    color: #fff;
+    height: 100%;
+    width: 100%;
+    overflow-x: hidden;
+    background: url('2.jpg') no-repeat center center fixed;
+    background-size: cover;
+    background-attachment: fixed; /* Parallax efekti */
+}
+
+/* ---------------- HEADER ---------------- */
+header {
+    width: 100%;
+    background: rgba(30,60,114,0.85);
+    padding: 18px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: fixed;
+    top: 0;
+    z-index: 999;
+    box-sizing: border-box;
+}
+
+.logo {
+    font-size: 1.8em;
+    font-weight: 800;
+    color: #ffda60;
+    text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+nav {
+    display: flex;
+    gap: 28px;
+}
+
+nav a {
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.05em;
+    transition: 0.2s;
+}
+
+nav a:hover { color: #ffda60; }
+
+.menu-btn { display: none; flex-direction: column; gap: 5px; cursor: pointer; }
+.menu-btn div { width: 28px; height: 3px; background: #fff; border-radius: 3px; }
+
+@media(max-width: 860px){
+    nav {
+        position: absolute;
+        top: 70px;
+        right: 0;
+        background: rgba(30,60,114,0.95);
+        flex-direction: column;
+        width: 100%;
+        padding: 20px 0;
+        display: none;
+    }
+    nav.active { display: flex; }
+    .menu-btn { display: flex; }
+}
+
+/* ---------------- SECTIONS ---------------- */
+.section {
+    padding: 100px 10%;
+    margin-top: 80px;
+    /* Karartma kaldırıldı */
+}
+
+.section h2 {
+    text-align: center;
+    font-size: 2.3em;
+    margin-bottom: 20px;
+}
+
+.section p {
+    text-align: center;
+    max-width: 750px;
+    margin: auto;
+}
+
+/* ---------------- BUTTON ---------------- */
+.btn {
+    display: inline-block;
+    padding: 14px 30px;
+    background: #ffda60;
+    color: #222;
+    margin-top: 25px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: 0.25s;
+}
+
+.btn:hover { background: #ffd53f; transform: translateY(-2px); }
+
+/* ---------------- FOOTER ---------------- */
+footer {
+    background: rgba(30,60,114,0.85);
+    color: #fff;
+    text-align: center;
+    padding: 18px;
+}
+</style>
+</head>
+<body>
+
+<header>
+    <div class="logo">CENGİZ BİLGİ SİSTEMİ</div>
+    <div class="menu-btn" onclick="toggleMenu()"><div></div><div></div><div></div></div>
+    <nav id="menu">
+        <a href="#home">Ana Sayfa</a>
+        <a href="#hakkimizda">Hakkımızda</a>
+        <a href="#hizmetler">Hizmetler</a>
+        <a href="parsel.html">Parsel Sorgulama</a>
+        <a href="#iletisim">İletişim</a>
+    </nav>
+</header>
+
+<section id="home" class="section">
+    <h2>CENGİZ BİLGİ SİSTEMİ</h2>
+    <p>Harita tabanlı bilgi sistemleri, veri işleme ve profesyonel CBS çözümleri.</p>
+    <a class="btn" href="#iletisim">İletişime Geç</a>
+</section>
+
+<section id="hakkimizda" class="section">
+    <h2>Hakkımızda</h2>
+    <p>Cengiz Bilgi Sistemi, modern coğrafi bilgi sistemleri, harita yazılımları ve veri yönetimi alanlarında profesyonel çözümler üreten bir teknoloji şirketidir.</p>
+</section>
+
+<section id="hizmetler" class="section">
+    <h2>Hizmetlerimiz</h2>
+    <p>CBS yazılımları, veri entegrasyonu, parsel sorgu sistemleri, özel harita uygulamaları, otomasyon çözümleri ve kurumlara özel yazılım geliştirme hizmetleri sunuyoruz.</p>
+    <div style="text-align:center; margin-top:40px;">
+        <a href="parsel.html" class="btn">Parsel Sorgulama Sistemine Git</a>
+    </div>
+</section>
+
+<section id="iletisim" class="section">
+    <h2>İletişim</h2>
+    <div style="max-width:650px; margin:auto; text-align:center;">
+        <p><b>Adres:</b> Kurumsal adres buraya yazılabilir</p>
+        <p><b>Telefon:</b> 0 (545) 278 20 25</p>
+        <p><b>E-posta:</b> info@cengizbilgisistemi.com</p>
+    </div>
+</section>
+
+<footer>© 2025 Cengiz Bilgi Sistemi – Tüm Hakları Saklıdır.</footer>
+
+<script>
+function toggleMenu(){ document.getElementById("menu").classList.toggle("active"); }
+</script>
+
+</body>
+</html>
