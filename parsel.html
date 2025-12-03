@@ -83,7 +83,6 @@ button {
     <button id="clearBtn">Temizle</button>
     <button id="downloadKml">KML İndir</button>
 
-    <!-- MANUEL GEOJSON -->
     <input type="file" id="geojsonFile" accept=".geojson,.json" />
     <button id="manualLoad">GeoJSON Yükle</button>
 </div>
@@ -103,7 +102,8 @@ button {
 <script>
 var map = L.map('map').setView([39, 35], 6);
 
-L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+// Google Harita HTTPS zorunlu
+L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
     maxZoom: 20,
     subdomains:['mt0','mt1','mt2','mt3']
 }).addTo(map);
@@ -113,56 +113,95 @@ var filteredFeatures = new Map();
 var highlightLayer = null;
 var vectorGridLayer = null;
 
+// Güvenli anahtar oluşturucu
 function makeKey(p){
-    return `${p.il_ad}-${p.ilce_ad}-${p.mahalle_ad}-${p.adano}-${p.parselno}`;
+    if (!p) return "";
+    return [
+        p.il_ad || "",
+        p.ilce_ad || "",
+        p.mahalle_ad || "",
+        p.adano || "",
+        p.parselno || ""
+    ].join("-");
 }
 
-/* -------------------------
-   MANUEL GEOJSON OKUMA
-------------------------- */
+/* --------------------------------------------------
+    GEOJSON DOSYA YÜKLEME
+-------------------------------------------------- */
 document.getElementById("manualLoad").onclick = function () {
     let file = document.getElementById("geojsonFile").files[0];
-    if (!file) {
-        alert("Lütfen bir GeoJSON dosyası seçin.");
-        return;
-    }
+    if (!file) return alert("Lütfen bir GeoJSON dosyası seçin.");
 
     let reader = new FileReader();
     reader.onload = function (e) {
         try {
             let data = JSON.parse(e.target.result);
-            loadGeoJSONfromObject(data);
-            alert("GeoJSON başarıyla yüklendi!");
+            loadGeoJSON(data);
         } catch (err) {
-            alert("Geçersiz GeoJSON dosyası!");
+            alert("Geçersiz GeoJSON!");
         }
     };
     reader.readAsText(file);
 };
 
-/* -------------------------
-   OBJE OLARAK GEOJSON YÜKLE
-------------------------- */
-function loadGeoJSONfromObject(data){
+/* --------------------------------------------------
+    HER TÜRLÜ GEOJSON FORMATINI DESTEKLEYEN YÜKLEYİCİ
+-------------------------------------------------- */
+function loadGeoJSON(data){
 
+    // FeatureCollection değilse düzelt
+    if (data.type !== "FeatureCollection") {
+
+        // Tek Feature
+        if (data.type === "Feature") {
+            data = {
+                type: "FeatureCollection",
+                features: [data]
+            };
+        }
+        // Polygon veya MultiPolygon
+        else if (data.type === "Polygon" || data.type === "MultiPolygon") {
+            data = {
+                type: "FeatureCollection",
+                features: [{
+                    type:"Feature",
+                    geometry:data,
+                    properties:{}
+                }]
+            };
+        }
+        else {
+            alert("Bu GeoJSON türü desteklenmiyor!");
+            return;
+        }
+    }
+
+    // properties güvenli hale getir
+    data.features.forEach(f=>{
+        if (!f.properties) f.properties = {};
+    });
+
+    // Temizlik
     featureIndex.clear();
     filteredFeatures.clear();
     document.getElementById("parcelItems").innerHTML = "";
 
     if(vectorGridLayer) map.removeLayer(vectorGridLayer);
 
+    // Index oluştur
     data.features.forEach(f=>{
         featureIndex.set(makeKey(f.properties), f);
     });
 
+    // En kritik kısım: Layer stili "*" olmalı
     vectorGridLayer = L.vectorGrid.slicer(data, {
         rendererFactory: L.canvas.tile,
         interactive: true,
         vectorTileLayerStyles: {
-            sliced: {
+            "*": {
                 fill: true,
                 fillColor: '#3388ff',
-                fillOpacity: 0.2,
+                fillOpacity: 0.25,
                 color: '#3388ff',
                 weight: 1
             }
@@ -171,23 +210,23 @@ function loadGeoJSONfromObject(data){
     }).addTo(map);
 
     vectorGridLayer.on("click", function(e){
-        var props = e.layer.properties;
-        var key = makeKey(props);
-        var feature = featureIndex.get(key);
-        if(!feature) return;
+        let props = e.layer.properties; // doğru erişim
+        let key = makeKey(props);
+        let feature = featureIndex.get(key);
+
+        if (!feature) return;
 
         highlightFeature(feature);
-
-        if(!filteredFeatures.has(key)){
-            filteredFeatures.set(key, feature);
-            updateList();
-        }
+        filteredFeatures.set(key, feature);
+        updateList();
     });
+
+    alert("GeoJSON yüklendi!");
 }
 
-/* -------------------------
-   PARSEL ÖNE ÇIKARTMA
-------------------------- */
+/* --------------------------------------------------
+    PARSEL HIGHLIGHT
+-------------------------------------------------- */
 function highlightFeature(feature){
     if(highlightLayer) map.removeLayer(highlightLayer);
 
@@ -197,54 +236,58 @@ function highlightFeature(feature){
 
     let p = feature.properties;
 
-    highlightLayer.bindPopup(`
-        <b>İl:</b> ${p.il_ad}<br>
-        <b>İlçe:</b> ${p.ilce_ad}<br>
-        <b>Mahalle:</b> ${p.mahalle_ad}<br>
-        <b>Ada:</b> ${p.adano}<br>
-        <b>Parsel:</b> ${p.parselno}
-    `).openPopup();
+    highlightLayer.bindPopup(
+        `<b>İl:</b> ${p.il_ad}<br>
+         <b>İlçe:</b> ${p.ilce_ad}<br>
+         <b>Mahalle:</b> ${p.mahalle_ad}<br>
+         <b>Ada:</b> ${p.adano}<br>
+         <b>Parsel:</b> ${p.parselno}`
+    ).openPopup();
 
     map.fitBounds(highlightLayer.getBounds());
 }
 
-/* -------------------------
-   LİSTE GÜNCELLE
-------------------------- */
+/* --------------------------------------------------
+    LİSTE GÜNCELLEME
+-------------------------------------------------- */
 function updateList(){
     let html = "";
-    filteredFeatures.forEach((feature, key)=>{
+    filteredFeatures.forEach((feature,key)=>{
         let p = feature.properties;
         html += `<li data-key="${key}">${p.adano}/${p.parselno} – ${p.mahalle_ad}</li>`;
     });
-
     document.getElementById("parcelItems").innerHTML = html;
 
     document.querySelectorAll("#parcelItems li").forEach(li=>{
-        li.addEventListener("click", ()=> highlightFeature(featureIndex.get(li.dataset.key)));
+        li.addEventListener("click", ()=>{
+            highlightFeature(featureIndex.get(li.dataset.key));
+        });
     });
 }
 
-/* -------------------------
-   SORGULAMA
-------------------------- */
+/* --------------------------------------------------
+    PARSEL SORGULAMA
+-------------------------------------------------- */
 function queryParcels(){
-    var il = il_ad.value.trim().toLowerCase();
-    var ilce = ilce_ad.value.trim().toLowerCase();
-    var mahalle = mahalle_ad.value.trim().toLowerCase();
-    var ada = adano.value.trim();
-    var parsel = parselno.value.trim();
+
+    let il      = il_ad.value.trim().toLowerCase();
+    let ilce    = ilce_ad.value.trim().toLowerCase();
+    let mahalle = mahalle_ad.value.trim().toLowerCase();
+    let ada     = adano.value.trim();
+    let parsel  = parselno.value.trim();
 
     let matches = [];
 
     featureIndex.forEach((feature,key)=>{
         let p = feature.properties;
 
-        if((!il || p.il_ad.toLowerCase()==il) &&
-           (!ilce || p.ilce_ad.toLowerCase()==ilce) &&
-           (!mahalle || p.mahalle_ad.toLowerCase()==mahalle) &&
-           (!ada || p.adano==ada) &&
-           (!parsel || p.parselno==parsel)){
+        if(
+            (!il      || (p.il_ad || "").toLowerCase()==il) &&
+            (!ilce    || (p.ilce_ad || "").toLowerCase()==ilce) &&
+            (!mahalle || (p.mahalle_ad || "").toLowerCase()==mahalle) &&
+            (!ada     || (p.adano || "")==ada) &&
+            (!parsel  || (p.parselno || "")==parsel)
+        ){
             matches.push(feature);
             filteredFeatures.set(key, feature);
         }
@@ -256,39 +299,60 @@ function queryParcels(){
     zoomToFeatures(matches);
 }
 
+document.getElementById("filterBtn").onclick = queryParcels;
+
+/* --------------------------------------------------
+    ZOOM
+-------------------------------------------------- */
 function zoomToFeatures(features){
     let pts = [];
+
     features.forEach(f=>{
         let g = f.geometry;
-        if(g.type==="Polygon"){
-            g.coordinates[0].forEach(pt=>pts.push([pt[1],pt[0]]));
-        } else if(g.type==="MultiPolygon"){
+
+        if (g.type === "Polygon") {
+            g.coordinates.forEach(ring=>{
+                ring.forEach(pt=>pts.push([pt[1], pt[0]]));
+            });
+        }
+
+        else if (g.type === "MultiPolygon") {
             g.coordinates.forEach(poly=>{
-                poly[0].forEach(pt=>pts.push([pt[1],pt[0]]));
+                poly.forEach(ring=>{
+                    ring.forEach(pt=>pts.push([pt[1], pt[0]]));
+                });
             });
         }
     });
+
     if(pts.length>0) map.fitBounds(pts);
 }
 
-filterBtn.onclick = queryParcels;
-
-clearBtn.onclick = ()=>{
+/* --------------------------------------------------
+    TEMİZLEME
+-------------------------------------------------- */
+document.getElementById("clearBtn").onclick = ()=>{
     filteredFeatures.clear();
     document.getElementById("parcelItems").innerHTML = "";
     if(highlightLayer) map.removeLayer(highlightLayer);
 };
 
-/* -------------------------
-   KML İNDİRME
-------------------------- */
-downloadKml.onclick = ()=>{
-    if(filteredFeatures.size===0) return alert("Parsel seçilmedi!");
-    var kml = tokml({type:"FeatureCollection", features: Array.from(filteredFeatures.values())});
-    var blob = new Blob([kml], {type:"application/vnd.google-earth.kml+xml"});
-    var link=document.createElement("a");
-    link.href=URL.createObjectURL(blob);
-    link.download="parseller.kml";
+/* --------------------------------------------------
+    KML İNDİRME
+-------------------------------------------------- */
+document.getElementById("downloadKml").onclick = ()=>{
+    if(filteredFeatures.size===0)
+        return alert("Parsel seçilmedi!");
+
+    let kml = tokml({
+        type:"FeatureCollection",
+        features: Array.from(filteredFeatures.values())
+    });
+
+    let blob = new Blob([kml], {type:"application/vnd.google-earth.kml+xml"});
+    let link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "parseller.kml";
     link.click();
 };
 
