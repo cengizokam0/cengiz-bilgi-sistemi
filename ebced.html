@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>Ebced Hesaplayıcı — Ta Merbuta Güncel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Amiri', serif; background: linear-gradient(145deg,#f5f7fa,#e4ebf5); color:#222; margin:0; padding:0; display:flex; justify-content:center; align-items:flex-start; min-height:100vh; padding-top:40px; }
+    .container { background:#fff; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:24px 30px; width:520px; max-width:95%; text-align:right; }
+    h1{ font-size:1.6em; color:#0d3b66; margin:0 0 10px 0; text-align:center; direction:rtl; }
+    input[type="text"]{ width:100%; padding:10px; font-size:1.05em; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; }
+    label { display:block; margin:8px 0; font-size:0.95em; text-align:right; }
+    .controls { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; flex-wrap:wrap; }
+    button{ background:#0d3b66; color:#fff; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-size:0.95em; }
+    button:hover{ background:#09406b; }
+    .dynamic { background:#f0f4ff; padding:8px; border-radius:8px; margin-top:10px; font-size:0.95em; max-height:160px; overflow:auto; }
+    .analysis span{ padding:3px 6px; border-radius:4px; }
+    .shadda{ background:#ffeeba; }
+    .tanwin{ background:#c3e6cb; }
+    .silent{ background:#f8d7da; }
+    .normal{ background:#e1e8f0; }
+    .result{ margin-top:12px; background:#fff8dc; padding:10px; border-radius:8px; color:#8b4513; font-size:0.95em; text-align:right; }
+    table{ width:100%; border-collapse:collapse; margin-top:12px; font-size:0.9em; }
+    th,td{ border:1px solid #ccc; padding:6px; text-align:center; }
+    th{ background:#0d3b66; color:#fff; }
+    small{ color:#555; display:block; margin-top:4px; text-align:right; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📖 Ebced Hesaplayıcı & Türkçe Çeviri</h1>
+
+    <label for="wordInput">Bir Arapça kelime veya ifade giriniz:</label>
+    <input id="wordInput" type="text" placeholder="مثال: الله / كِتَابٌ / نصر">
+
+    <label><input type="checkbox" id="includeSilent"> Okunmayan harfleri <b>dahil et</b></label>
+    <label><input type="checkbox" id="taMerbutaAsHa"> Ta Merbuta (ة) harfini “ه” olarak say</label>
+
+    <div class="controls">
+      <button id="scanBtn">İşaretleri Tara</button>
+      <button id="calcBtn">Hesapla</button>
+      <button id="copyResBtn">Sonucu Kopyala</button>
+      <button id="manualAddBtn">Manuel Sonucu Tabloya Ekle</button>
+      <button id="exportBtn">Excel İndir</button>
+    </div>
+
+    <div id="dynamicArea" class="dynamic" aria-live="polite"></div>
+    <div id="result" class="result" style="display:none;" contenteditable="true"></div>
+
+    <h3 style="margin-top:14px;">Geçmiş</h3>
+    <table id="historyTable">
+      <tr>
+        <th>Kelime</th><th>Okunmayan</th><th>Şeddeler</th><th>Tenvinler</th>
+        <th>Toplam Ebced</th><th>Hicrî → Milâdî</th><th>Rûmî → Milâdî</th><th>Çeviri</th>
+      </tr>
+    </table>
+  </div>
+
+  <script>
+  const ebcedValues = {
+    'ا':1,'أ':1,'إ':1,'آ':1,'ب':2,'ج':3,'د':4,'ه':5,
+    'و':6,'ز':7,'ح':8,'ط':9,'ي':10,'ك':20,'ل':30,'م':40,'ن':50,
+    'س':60,'ع':70,'ف':80,'ص':90,'ق':100,'ر':200,'ش':300,'ت':400,
+    'ث':500,'خ':600,'ذ':700,'ض':800,'ظ':900,'غ':1000,
+    'ء':1,'ؤ':6,'ئ':10,'ى':1
+  };
+  const sunLetters = "تثدذرزسشصضطظلن";
+  const tanwinMarks = ['ً','ٍ','ٌ'];
+
+  function isSilentLetter(word, i) {
+    const letter = word[i]; const next = word[i+1]||''; const prev = word[i-1]||'';
+    if(i===0 && letter==='ا' && !'إأآ'.includes(letter)) return true;
+    if(letter==='ل' && prev==='ا' && sunLetters.includes(next)) return true;
+    if(letter==='ا' && prev==='و' && i===word.length-1) return true;
+    if(letter==='ا' && prev==='ل' && next==='و') return true;
+    if(letter==='ى') return false;
+    if(i===0 && letter==='ا' && next==='ب' && word.startsWith('ابن')) return true;
+    return false;
+  }
+
+  function hijriToGregorian(h){ if(typeof h!=='number'||!isFinite(h))return ''; return h+622-Math.floor(h/33);}
+  function rumiToGregorian(r){ if(typeof r!=='number'||!isFinite(r))return ''; return r+584;}
+  function translateToTurkish(word){
+    const dictionary={'الله':'Allah','كتاب':'Kitap','نصر':'Zafer','سلام':'Selam','محمد':'Muhammed'};
+    return dictionary[word]||'Çeviri bulunamadı';
+  }
+
+  let history=[];
+  const wordInput=document.getElementById('wordInput');
+  const dynamicArea=document.getElementById('dynamicArea');
+  const includeSilentCheckbox=document.getElementById('includeSilent');
+  const taMerbutaAsHaCheckbox=document.getElementById('taMerbutaAsHa');
+  const scanBtn=document.getElementById('scanBtn');
+  const calcBtn=document.getElementById('calcBtn');
+  const copyResBtn=document.getElementById('copyResBtn');
+  const exportBtn=document.getElementById('exportBtn');
+  const manualAddBtn=document.getElementById('manualAddBtn');
+  const resultDiv=document.getElementById('result');
+  const historyTable=document.getElementById('historyTable');
+
+  function scanMarksAndBuildUI(){
+    const word=wordInput.value.trim(); dynamicArea.innerHTML=''; resultDiv.style.display='none';
+    if(!word){ dynamicArea.innerHTML='<small>Önce bir kelime girin ve sonra "İşaretleri Tara"ya basın.</small>'; return; }
+    let shaddaCount=0, tanwinCount=0;
+    for(let ch of word){ if(ch==='ّ')shaddaCount++; if(tanwinMarks.includes(ch))tanwinCount++; }
+    dynamicArea.innerHTML=`<div><small>Kelime: <b>${word}</b></small></div>`;
+    if(shaddaCount>0){ const shHtml=['<div style="margin-top:8px;"><b>Şedde Seçimleri:</b>'];
+      for(let i=1;i<=shaddaCount;i++){ shHtml.push(`<label><input type="checkbox" id="chk_shadda_${i}" checked> Şedde ${i} dahil et</label>`);}
+      shHtml.push('</div>'); dynamicArea.innerHTML+=shHtml.join(''); }
+    else{ dynamicArea.innerHTML+=`<div><small>Bu kelimede şedde bulunmuyor.</small></div>`; }
+    if(tanwinCount>0){ const tnHtml=['<div style="margin-top:8px;"><b>Tenvin Seçimleri:</b>'];
+      for(let i=1;i<=tanwinCount;i++){ tnHtml.push(`<label><input type="checkbox" id="chk_tanwin_${i}" checked> Tenvin ${i} “ن” olarak dahil et</label>`);}
+      tnHtml.push('</div>'); dynamicArea.innerHTML+=tnHtml.join(''); }
+    else{ dynamicArea.innerHTML+=`<div><small>Bu kelimede tenvin bulunmuyor.</small></div>`;}
+    dynamicArea.innerHTML+=`<div style="margin-top:8px;"><small>Not: Şedde, solundaki harfin değerini tekrar ekler.</small></div>`;
+  }
+
+  function calculateEbced(){
+    const rawWord=wordInput.value.trim(); if(!rawWord){alert('Lütfen bir Arapça kelime giriniz.');return;}
+    const includeSilent=includeSilentCheckbox.checked; const taAsHa=taMerbutaAsHaCheckbox.checked;
+    let word=rawWord.replace(/ة/g, taAsHa?'ه':'ت');
+    let total=0, details=[], ignoredLetters=[], shaddaStatuses=[], tanwinStatuses=[];
+    let shIndex=0, tnIndex=0, analysisHtml='';
+    for(let i=0;i<word.length;i++){
+      const ch=word[i];
+      if(ch==='ّ'){ shIndex++; const chk=document.getElementById(`chk_shadda_${shIndex}`);
+        const prev=word[i-1]||''; if(chk&&chk.checked&&prev&&ebcedValues[prev]){total+=ebcedValues[prev]; shaddaStatuses.push(`Şedde${shIndex}: Dahil`);}
+        else{shaddaStatuses.push(`Şedde${shIndex}: Hariç`);} analysisHtml+=`<span class="shadda">ّ</span>`; continue; }
+      if(tanwinMarks.includes(ch)){ tnIndex++; const chk=document.getElementById(`chk_tanwin_${tnIndex}`);
+        if(chk&&chk.checked){total+=ebcedValues['ن']; tanwinStatuses.push(`Tenvin${tnIndex}: Dahil`);}
+        else{tanwinStatuses.push(`Tenvin${tnIndex}: Hariç`);} analysisHtml+=`<span class="tanwin">${ch}</span>`; continue; }
+      if(!ebcedValues[ch]){ analysisHtml+=`<span class="normal">${ch}</span>`; continue;}
+      if(!includeSilent&&isSilentLetter(word,i)){ignoredLetters.push(ch); analysisHtml+=`<span class="silent">${ch}</span>`; continue;}
+      total+=ebcedValues[ch]; details.push(`${ch}:${ebcedValues[ch]}`); analysisHtml+=`<span class="normal">${ch}</span>`;
+    }
+    const showDates=total<=1600; const hijriYear=total, rumiYear=total;
+    const miladiFromHijri=showDates?hijriToGregorian(hijriYear):'';
+    const miladiFromRumi=showDates?rumiToGregorian(rumiYear):'';
+    const translation=translateToTurkish(rawWord);
+    resultDiv.style.display='block';
+    resultDiv.innerHTML=`
+      <div style="text-align:right;">
+        <div class="analysis">${analysisHtml}</div>
+        <b>Kelime:</b> ${rawWord}<br>
+        <b>Toplam Ebced Değeri:</b> ${total}<br>
+        <small>${details.join(' + ')}</small><br>
+        ${shaddaStatuses.length?`<small>🔁 ${shaddaStatuses.join(', ')}</small><br>`:''}
+        ${tanwinStatuses.length?`<small>➕ ${tanwinStatuses.join(', ')}</small><br>`:''}
+        ${ignoredLetters.length?`<small>🚫 Sayılmayan harfler: ${ignoredLetters.join(', ')}</small><br>`:''}
+        <div style="margin-top:8px; background:#f0f4ff; padding:8px; border-radius:6px;">
+          ${showDates?`<b>🕌 Hicrî:</b> ${hijriYear} → <b>${miladiFromHijri}</b><br>
+          <b>📅 Rûmî:</b> ${rumiYear} → <b>${miladiFromRumi}</b>`:`<i>1600’den büyük olduğu için tarih dönüşümü yok.</i>`}
+        </div>
+        <div style="margin-top:8px;"><b>Türkçe Çeviri:</b> ${translation}</div>
+      </div>`;
+    const row={kelime:rawWord,okunmayan:includeSilent?'Dahil':'Hariç',shaddes:shaddaStatuses.join(' | '),
+      tenvins:tanwinStatuses.join(' | '),toplamEbced:total,hicriMiladi:miladiFromHijri,rumiMiladi:miladiFromRumi,ceviri:translation};
+    history.push(row);
+    const tr=historyTable.insertRow();
+    [row.kelime,row.okunmayan,row.shaddes,row.tenvins,row.toplamEbced,row.hicriMiladi,row.rumiMiladi,row.ceviri].forEach(v=>{const td=tr.insertCell(); td.innerText=v;});
+  }
+
+  function addManualResultToTable(){
+    if(!resultDiv.innerText.trim()){alert('Önce hesaplayın veya manuel metin girin.'); return;}
+    const rawWord=wordInput.value.trim()||'---';
+    const includeSilent=includeSilentCheckbox.checked?'Dahil':'Hariç';
+    const shAdds=Array.from(document.querySelectorAll('[id^="chk_shadda_"]')).map(c=>c.checked?'Dahil':'Hariç');
+    const tnAdds=Array.from(document.querySelectorAll('[id^="chk_tanwin_"]')).map(c=>c.checked?'Dahil':'Hariç');
+    const manualText=resultDiv.innerText.trim();
+    // Manuel metinde ilk sayıyı al
+    const manualNumber=parseInt(manualText.match(/\d+/)?.[0]||'');
+    let miladiFromHijri='---', miladiFromRumi='---';
+    if(!isNaN(manualNumber)){
+        miladiFromHijri=hijriToGregorian(manualNumber);
+        miladiFromRumi=rumiToGregorian(manualNumber);
+    }
+    const tr=historyTable.insertRow();
+    [rawWord, includeSilent, shAdds.join(' | '), tnAdds.join(' | '), manualText, miladiFromHijri, miladiFromRumi, 'Manuel Giriş'].forEach(v=>{
+      const td=tr.insertCell(); td.innerText=v;
+    });
+    alert('Manuel sonuç tabloya eklendi ve tarih dönüştürüldü.');
+  }
+
+  function exportToCSV(){
+    if(history.length===0){alert('Henüz veri yok.');return;}
+    const blob=new Blob(["\uFEFF"+history.map(r=>[r.kelime,r.okunmayan,r.shaddes,r.tenvins,r.toplamEbced,r.hicriMiladi,r.rumiMiladi,r.ceviri].join(';')).join('\r\n')],
+        {type:"text/csv;charset=utf-8;"});
+    const link=document.createElement('a'); link.href=URL.createObjectURL(blob);
+    link.download='ebced_tamerbuta_guncel.csv'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  }
+
+  function copyResultToClipboard(){
+    if(!resultDiv.innerText.trim()){alert('Önce hesaplayın.'); return;}
+    navigator.clipboard?.writeText(resultDiv.innerText).then(()=>alert('Sonuç panoya kopyalandı.'));
+  }
+
+  scanBtn.addEventListener('click',scanMarksAndBuildUI);
+  calcBtn.addEventListener('click',calculateEbced);
+  manualAddBtn.addEventListener('click',addManualResultToTable);
+  exportBtn.addEventListener('click',exportToCSV);
+  copyResBtn.addEventListener('click',copyResultToClipboard);
+  wordInput.addEventListener('input',()=>{dynamicArea.innerHTML='<small>Değişiklik yapıldı. "İşaretleri Tara"ya basın.</small>'; resultDiv.style.display='none';});
+  dynamicArea.innerHTML='<small>Kelime yazıp "İşaretleri Tara"ya basın — her şedde/tenvin için kutu oluşur.</small>';
+  </script>
+</body>
+</html>
