@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cengiz Bilgi Sistemi – Parsel Sorgulama</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+<style>
+body { margin:0; font-family:Arial; }
+
+header {
+    background:#1e3c72;
+    color:#fff;
+    padding:15px 30px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+header a { color:white; text-decoration:none; margin-left:20px; font-weight:bold; }
+
+#controls {
+    padding:10px;
+    background:#fff;
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:5px;
+    border-bottom:2px solid #1e3c72;
+}
+
+input, button {
+    padding:6px 10px;
+    font-size:1em;
+}
+
+button {
+    background:#1e3c72;
+    border:none;
+    color:white;
+    cursor:pointer;
+    border-radius:4px;
+}
+
+#main { display:flex; height:86vh; }
+#map { flex:3; }
+#sidebar {
+    flex:1;
+    background:#fff;
+    border-left:3px solid #2a5298;
+    overflow-y:auto;
+    padding:10px;
+}
+
+#parcelItems li {
+    background:#eee;
+    padding:6px;
+    margin-bottom:4px;
+    border-radius:4px;
+    cursor:pointer;
+}
+#parcelItems li:hover { background:#ddd; }
+</style>
+</head>
+<body>
+
+<header>
+    <div style="font-size:1.4em; font-weight:bold;">Cengiz Bilgi Sistemi</div>
+    <nav>
+        <a href="index.html">Ana Sayfa</a>
+    </nav>
+</header>
+
+<div id="controls">
+    <input type="text" id="il_ad" placeholder="İl" />
+    <input type="text" id="ilce_ad" placeholder="İlçe" />
+    <input type="text" id="mahalle_ad" placeholder="Mahalle" />
+    <input type="text" id="adano" placeholder="Ada No" />
+    <input type="text" id="parselno" placeholder="Parsel No" />
+    <button id="filterBtn">Sorgula</button>
+    <button id="clearBtn">Temizle</button>
+    <button id="downloadKml">KML İndir</button>
+
+    <input type="file" id="geojsonFile" accept=".geojson,.json" />
+    <button id="manualLoad">GeoJSON Yükle</button>
+</div>
+
+<div id="main">
+    <div id="map"></div>
+    <div id="sidebar">
+        <h3>Sorgulanan Parseller</h3>
+        <ul id="parcelItems"></ul>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.vectorgrid/dist/Leaflet.VectorGrid.bundled.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tokml@0.3.0/tokml.js"></script>
+
+<script>
+var map = L.map('map').setView([39, 35], 6);
+
+// Google Harita HTTPS zorunlu
+L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    maxZoom: 20,
+    subdomains:['mt0','mt1','mt2','mt3']
+}).addTo(map);
+
+var featureIndex = new Map();
+var filteredFeatures = new Map();
+var highlightLayer = null;
+var vectorGridLayer = null;
+
+// Güvenli anahtar oluşturucu
+function makeKey(p){
+    if (!p) return "";
+    return [
+        p.il_ad || "",
+        p.ilce_ad || "",
+        p.mahalle_ad || "",
+        p.adano || "",
+        p.parselno || ""
+    ].join("-");
+}
+
+/* --------------------------------------------------
+    GEOJSON DOSYA YÜKLEME
+-------------------------------------------------- */
+document.getElementById("manualLoad").onclick = function () {
+    let file = document.getElementById("geojsonFile").files[0];
+    if (!file) return alert("Lütfen bir GeoJSON dosyası seçin.");
+
+    let reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            let data = JSON.parse(e.target.result);
+            loadGeoJSON(data);
+        } catch (err) {
+            alert("Geçersiz GeoJSON!");
+        }
+    };
+    reader.readAsText(file);
+};
+
+/* --------------------------------------------------
+    HER TÜRLÜ GEOJSON FORMATINI DESTEKLEYEN YÜKLEYİCİ
+-------------------------------------------------- */
+function loadGeoJSON(data){
+
+    // FeatureCollection değilse düzelt
+    if (data.type !== "FeatureCollection") {
+
+        // Tek Feature
+        if (data.type === "Feature") {
+            data = {
+                type: "FeatureCollection",
+                features: [data]
+            };
+        }
+        // Polygon veya MultiPolygon
+        else if (data.type === "Polygon" || data.type === "MultiPolygon") {
+            data = {
+                type: "FeatureCollection",
+                features: [{
+                    type:"Feature",
+                    geometry:data,
+                    properties:{}
+                }]
+            };
+        }
+        else {
+            alert("Bu GeoJSON türü desteklenmiyor!");
+            return;
+        }
+    }
+
+    // properties güvenli hale getir
+    data.features.forEach(f=>{
+        if (!f.properties) f.properties = {};
+    });
+
+    // Temizlik
+    featureIndex.clear();
+    filteredFeatures.clear();
+    document.getElementById("parcelItems").innerHTML = "";
+
+    if(vectorGridLayer) map.removeLayer(vectorGridLayer);
+
+    // Index oluştur
+    data.features.forEach(f=>{
+        featureIndex.set(makeKey(f.properties), f);
+    });
+
+    // En kritik kısım: Layer stili "*" olmalı
+    vectorGridLayer = L.vectorGrid.slicer(data, {
+        rendererFactory: L.canvas.tile,
+        interactive: true,
+        vectorTileLayerStyles: {
+            "*": {
+                fill: true,
+                fillColor: '#3388ff',
+                fillOpacity: 0.25,
+                color: '#3388ff',
+                weight: 1
+            }
+        },
+        getFeatureId: f => makeKey(f.properties)
+    }).addTo(map);
+
+    vectorGridLayer.on("click", function(e){
+        let props = e.layer.properties; // doğru erişim
+        let key = makeKey(props);
+        let feature = featureIndex.get(key);
+
+        if (!feature) return;
+
+        highlightFeature(feature);
+        filteredFeatures.set(key, feature);
+        updateList();
+    });
+
+    alert("GeoJSON yüklendi!");
+}
+
+/* --------------------------------------------------
+    PARSEL HIGHLIGHT
+-------------------------------------------------- */
+function highlightFeature(feature){
+    if(highlightLayer) map.removeLayer(highlightLayer);
+
+    highlightLayer = L.geoJSON(feature, {
+        style: { color:"red", weight:2, fillOpacity:0.4 }
+    }).addTo(map);
+
+    let p = feature.properties;
+
+    highlightLayer.bindPopup(
+        `<b>İl:</b> ${p.il_ad}<br>
+         <b>İlçe:</b> ${p.ilce_ad}<br>
+         <b>Mahalle:</b> ${p.mahalle_ad}<br>
+         <b>Ada:</b> ${p.adano}<br>
+         <b>Parsel:</b> ${p.parselno}`
+    ).openPopup();
+
+    map.fitBounds(highlightLayer.getBounds());
+}
+
+/* --------------------------------------------------
+    LİSTE GÜNCELLEME
+-------------------------------------------------- */
+function updateList(){
+    let html = "";
+    filteredFeatures.forEach((feature,key)=>{
+        let p = feature.properties;
+        html += `<li data-key="${key}">${p.adano}/${p.parselno} – ${p.mahalle_ad}</li>`;
+    });
+    document.getElementById("parcelItems").innerHTML = html;
+
+    document.querySelectorAll("#parcelItems li").forEach(li=>{
+        li.addEventListener("click", ()=>{
+            highlightFeature(featureIndex.get(li.dataset.key));
+        });
+    });
+}
+
+/* --------------------------------------------------
+    PARSEL SORGULAMA
+-------------------------------------------------- */
+function queryParcels(){
+
+    let il      = il_ad.value.trim().toLowerCase();
+    let ilce    = ilce_ad.value.trim().toLowerCase();
+    let mahalle = mahalle_ad.value.trim().toLowerCase();
+    let ada     = adano.value.trim();
+    let parsel  = parselno.value.trim();
+
+    let matches = [];
+
+    featureIndex.forEach((feature,key)=>{
+        let p = feature.properties;
+
+        if(
+            (!il      || (p.il_ad || "").toLowerCase()==il) &&
+            (!ilce    || (p.ilce_ad || "").toLowerCase()==ilce) &&
+            (!mahalle || (p.mahalle_ad || "").toLowerCase()==mahalle) &&
+            (!ada     || (p.adano || "")==ada) &&
+            (!parsel  || (p.parselno || "")==parsel)
+        ){
+            matches.push(feature);
+            filteredFeatures.set(key, feature);
+        }
+    });
+
+    if(matches.length===0) return alert("Sonuç bulunamadı!");
+
+    updateList();
+    zoomToFeatures(matches);
+}
+
+document.getElementById("filterBtn").onclick = queryParcels;
+
+/* --------------------------------------------------
+    ZOOM
+-------------------------------------------------- */
+function zoomToFeatures(features){
+    let pts = [];
+
+    features.forEach(f=>{
+        let g = f.geometry;
+
+        if (g.type === "Polygon") {
+            g.coordinates.forEach(ring=>{
+                ring.forEach(pt=>pts.push([pt[1], pt[0]]));
+            });
+        }
+
+        else if (g.type === "MultiPolygon") {
+            g.coordinates.forEach(poly=>{
+                poly.forEach(ring=>{
+                    ring.forEach(pt=>pts.push([pt[1], pt[0]]));
+                });
+            });
+        }
+    });
+
+    if(pts.length>0) map.fitBounds(pts);
+}
+
+/* --------------------------------------------------
+    TEMİZLEME
+-------------------------------------------------- */
+document.getElementById("clearBtn").onclick = ()=>{
+    filteredFeatures.clear();
+    document.getElementById("parcelItems").innerHTML = "";
+    if(highlightLayer) map.removeLayer(highlightLayer);
+};
+
+/* --------------------------------------------------
+    KML İNDİRME
+-------------------------------------------------- */
+document.getElementById("downloadKml").onclick = ()=>{
+    if(filteredFeatures.size===0)
+        return alert("Parsel seçilmedi!");
+
+    let kml = tokml({
+        type:"FeatureCollection",
+        features: Array.from(filteredFeatures.values())
+    });
+
+    let blob = new Blob([kml], {type:"application/vnd.google-earth.kml+xml"});
+    let link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "parseller.kml";
+    link.click();
+};
+
+</script>
+</body>
+</html>
